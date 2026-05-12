@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-// MCP Server for Open Claude in Chrome extension.
+// MCP Server for Open Claude in Firefox extension.
 // Started by Claude Code via stdio MCP transport.
 //
 // Operates in one of two modes:
@@ -21,7 +21,7 @@ import { z } from "zod";
 const DEFAULT_PORT = 18765;
 
 function getPort() {
-  const configPath = path.join(os.homedir(), ".config", "open-claude-in-chrome", "config.json");
+  const configPath = path.join(os.homedir(), ".config", "open-claude-in-firefox", "config.json");
   try {
     const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
     return config.port || DEFAULT_PORT;
@@ -66,7 +66,7 @@ function sendToExtension(tool, args) {
       if (!nativeHostSocket || nativeHostSocket.destroyed) {
         clearTimeout(timer);
         pendingRequests.delete(id);
-        reject(new Error("Browser extension is not connected. Make sure a supported Chromium browser is running with the Open Claude in Chrome extension installed and enabled."));
+        reject(new Error("Browser extension is not connected. Make sure Firefox is running with the Open Claude in Firefox extension installed and enabled."));
         return;
       }
       const msg = JSON.stringify({ id, type: "tool_request", tool, args }) + "\n";
@@ -87,7 +87,7 @@ function sendToExtension(tool, args) {
 
 // --- Pidfile management ---
 
-const pidfilePath = path.join(os.tmpdir(), `open-claude-in-chrome-mcp-${TCP_PORT}.pid`);
+const pidfilePath = path.join(os.tmpdir(), `open-claude-in-firefox-mcp-${TCP_PORT}.pid`);
 
 function writePidfile() {
   try { fs.writeFileSync(pidfilePath, String(process.pid)); } catch {}
@@ -372,7 +372,7 @@ async function start() {
   // Clean up stale pidfiles (but don't kill live servers)
   const pidfiles = [
     pidfilePath,
-    path.join(os.tmpdir(), `unblocked-chrome-mcp-${TCP_PORT}.pid`),
+    path.join(os.tmpdir(), `open-claude-in-firefox-mcp-${TCP_PORT}.pid`),
   ];
   for (const pf of pidfiles) {
     try {
@@ -441,7 +441,7 @@ async function callTool(toolName, args) {
 // --- MCP Server with all 18 tools ---
 
 const server = new McpServer({
-  name: "open-claude-in-chrome",
+  name: "open-claude-in-firefox",
   version: "1.0.0",
 });
 
@@ -663,7 +663,7 @@ server.tool(
 // 16. switch_browser
 server.tool(
   "switch_browser",
-  "Switch which Chrome browser is used for browser automation. Call this when the user wants to connect to a different Chrome browser. Broadcasts a connection request to all Chrome browsers with the extension installed \u2014 the user clicks 'Connect' in the desired browser.",
+  "Switch which Firefox browser is used for browser automation. Call this when the user wants to connect to a different Firefox browser.",
   {},
   async (args) => callTool("switch_browser", args)
 );

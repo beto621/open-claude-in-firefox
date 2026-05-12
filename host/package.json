@@ -1,8 +1,8 @@
 {
-  "name": "open-claude-in-chrome-host",
+  "name": "open-claude-in-firefox-host",
   "version": "1.0.0",
   "private": true,
-  "description": "MCP server and native messaging host for Open Claude in Chrome",
+  "description": "MCP server and native messaging host for Open Claude in Firefox",
   "type": "module",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1"

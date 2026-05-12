@@ -1,49 +1,36 @@
 <p align="center">
-  <img src="extension/icons/icon128.png" width="96" alt="Open Claude in Chrome">
+  <img src="extension/icons/icon128.png" width="96" alt="Open Claude in Firefox">
 </p>
 
-<h1 align="center">Open Claude in Chrome</h1>
+<h1 align="center">Open Claude in Firefox</h1>
 
 <p align="center">
   <em>Official Claude in Chrome gives you 58 blocked domains and two browsers.<br/>
-  <strong>Open Claude in Chrome gives you the whole web.</strong></em>
+  <strong>Open Claude in Firefox gives you the whole web — in Firefox.</strong></em>
   <br/>
-  <sub>Clean-room reimplementation of Anthropic's browser extension. No blocklist. Any Chromium browser. 100% feature &amp; performance parity.</sub>
-  <br/>
-  <sub>by <a href="https://noemica.io">noemica</a></sub>
+  <sub>Firefox port of the open-source Claude browser automation extension. No blocklist. Full MCP tool parity.</sub>
 </p>
 
 <p align="center">
   <a href="#whats-different">What's different</a> ·
   <a href="#installation">Install</a> ·
   <a href="#architecture">Architecture</a> ·
-  <a href="https://youtu.be/n4-2fjOsGhw">Demo</a> ·
-  <a href="https://www.noemica.io/blog/reverse-engineered-claude-in-chrome">How I built it</a>
+  <a href="#firefox-notes">Firefox notes</a>
 </p>
 
 ---
 
-<p align="center">
-  <a href="https://youtu.be/n4-2fjOsGhw">
-    <img src="https://img.youtube.com/vi/n4-2fjOsGhw/maxresdefault.jpg" alt="Demo — Claude on Tinder, Reddit, and Robinhood" width="820"/>
-  </a>
-  <br/>
-  <sub><em>Watch Claude navigate Tinder, Reddit, and Robinhood — sites the official extension can't reach.</em></sub>
-</p>
-
----
-
-The official [Claude in Chrome](https://code.claude.com/docs/en/chrome) extension gives Claude Code full browser automation — as long as you stay within Anthropic's allowlist of "safe" sites. Open Claude in Chrome is a clean-room reimplementation that strips the restrictions while keeping all 18 MCP tools and matching the official extension's performance.
+This is a Firefox port of [open-claude-in-chrome](https://github.com/noemica/open-claude-in-chrome), a clean-room reimplementation of Anthropic's [Claude in Chrome](https://code.claude.com/docs/en/chrome) extension. It gives Claude Code (and Claude Desktop) full browser automation via 18 MCP tools, without any domain restrictions, running in Firefox instead of Chromium.
 
 ## What's Different
 
-| | Claude in Chrome | Open Claude in Chrome |
+| | Claude in Chrome (official) | Open Claude in Firefox |
 |---|---|---|
 | **Domain blocklist** | 58 blocked domains across 11 categories | No blocklist. Navigate anywhere. |
-| **Browser support** | Chrome and Edge only | Any Chromium browser (Chrome, Edge, Brave, Arc, Opera, Vivaldi, etc.) |
+| **Browser** | Chrome and Edge only | Firefox |
 | **Source code** | Closed source | Open source (MIT) |
 | **Tools** | 18 MCP tools | Same 18 MCP tools |
-| **Performance** | Baseline | Identical |
+| **Automation method** | Chrome DevTools Protocol (CDP) | Firefox WebExtension APIs |
 
 ### Blocked Domains in the Official Extension
 
@@ -61,17 +48,17 @@ The official [Claude in Chrome](https://code.claude.com/docs/en/chrome) extensio
 | News/Media | NYT, WSJ, Barron's, MarketWatch, Bloomberg, Reuters, Economist, Wired, Vogue |
 | Social Media | Reddit |
 
-Open Claude in Chrome has **none of these restrictions**.
+Open Claude in Firefox has **none of these restrictions**.
 
 ## Architecture
 
 ```
-Claude Code <--stdio MCP--> mcp-server.js <--TCP--> native-host.js <--native messaging--> Extension <--> Browser
+Claude Code / Claude Desktop <--stdio MCP--> mcp-server.js <--TCP--> native-host.js <--native messaging--> Extension <--> Firefox
 ```
 
 Three components:
-1. **Extension** — Manifest V3 with CDP-based browser automation (all 18 tools)
-2. **MCP Server** — Node.js process started by Claude Code, exposes tools via MCP
+1. **Extension** — Manifest V3 using Firefox WebExtension APIs (screenshots via `captureVisibleTab`, input via content script synthetic events, JS eval via `scripting.executeScript`)
+2. **MCP Server** — Node.js process started by Claude Code or Claude Desktop, exposes tools via MCP
 3. **Native Messaging Host** — Bridge between the MCP server and the extension
 
 ## Installation
@@ -79,8 +66,8 @@ Three components:
 ### Prerequisites
 
 - **Node.js** v18+
-- **Any Chromium browser** (Chrome, Edge, Brave, Arc, Opera, Vivaldi, etc.)
-- **Claude Code** v2.0.73+
+- **Firefox** 109+
+- **Claude Code** v2.0.73+ and/or **Claude Desktop**
 
 ### Step 1: Install dependencies
 
@@ -90,44 +77,100 @@ npm install
 cd ..
 ```
 
-### Step 2: Load the extension
+### Step 2: Load the extension in Firefox
 
-1. Go to `chrome://extensions` (or `brave://extensions` / `edge://extensions`)
-2. Enable **Developer mode**
-3. Click **Load unpacked** and select the `extension/` directory
-4. Copy the **extension ID** shown under the extension name
+1. Open `about:debugging` in Firefox
+2. Click **This Firefox**
+3. Click **Load Temporary Add-on...**
+4. Select `extension/manifest.json`
 
-### Step 3: Register native messaging
+> **Permanent install**: Go to `about:addons` → gear icon → **Install Add-on From File** and select `extension/manifest.json`. Or load the `.xpi` if one is provided.
+
+Unlike Chrome, Firefox assigns the extension ID from `manifest.json` (`open-claude-in-firefox@anthropic`), so you don't need to pass an ID to the install script.
+
+### Step 3: Register the native messaging host
+
+#### macOS / Linux
 
 ```bash
-./install.sh <your-extension-id>
+./install.sh
 ```
 
-If you use multiple browsers, pass all IDs:
+#### Windows (manual)
 
-```bash
-./install.sh <chrome-id> <brave-id> <arc-id>
+Firefox on Windows finds native messaging hosts via the registry. Three steps:
+
+**3a.** Create a wrapper script at `host\native-host-wrapper.bat`:
+
+```bat
+@echo off
+node "%~dp0native-host.js"
 ```
 
-### Step 4: Restart your browser
+**3b.** Create the manifest at `host\com.anthropic.open_claude_in_firefox.json` (use the actual absolute path):
 
-Close **all** windows and reopen. The browser reads native messaging host configs on startup.
+```json
+{
+  "name": "com.anthropic.open_claude_in_firefox",
+  "description": "Open Claude in Firefox Native Messaging Host",
+  "path": "C:\\path\\to\\open-claude-in-firefox\\host\\native-host-wrapper.bat",
+  "type": "stdio",
+  "allowed_extensions": ["open-claude-in-firefox@anthropic"]
+}
+```
+
+**3c.** Register it in the registry. Run in PowerShell (adjust the path):
+
+```powershell
+$manifestPath = "C:\path\to\open-claude-in-firefox\host\com.anthropic.open_claude_in_firefox.json"
+New-Item -Path "HKCU:\SOFTWARE\Mozilla\NativeMessagingHosts\com.anthropic.open_claude_in_firefox" -Force |
+  Set-ItemProperty -Name "(Default)" -Value $manifestPath
+```
+
+### Step 4: Restart Firefox
+
+Close **all** Firefox windows and reopen. Firefox reads native messaging host configs on startup.
 
 ### Step 5: Add to Claude Code
 
 ```bash
-claude mcp add open-claude-in-chrome -- node /absolute/path/to/host/mcp-server.js
+claude mcp add open-claude-in-firefox -- node /absolute/path/to/host/mcp-server.js
 ```
 
 Find the absolute path with:
 
 ```bash
+# macOS / Linux
 echo "node $(pwd)/host/mcp-server.js"
+
+# Windows (PowerShell)
+"node $(Resolve-Path host\mcp-server.js)"
 ```
+
+### Step 5 (alternative): Add to Claude Desktop
+
+Edit your Claude Desktop config file and add an `mcpServers` entry:
+
+- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Linux**: `~/.config/Claude/claude_desktop_config.json`
+- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "open-claude-in-firefox": {
+      "command": "node",
+      "args": ["/absolute/path/to/host/mcp-server.js"]
+    }
+  }
+}
+```
+
+Fully quit and restart Claude Desktop after saving.
 
 ## Verification
 
-Start a new Claude Code session and test:
+Start a new Claude Code (or Claude Desktop) session and test:
 
 ```
 Navigate to reddit.com and take a screenshot
@@ -137,41 +180,62 @@ Reddit loads. No domain restriction.
 
 ## Available Tools
 
-All 18 tools, identical to Claude in Chrome:
+All 18 tools, matching the Claude in Chrome interface:
 
 | Tool | Description |
 |------|-------------|
-| `tabs_context_mcp` | Get tab group context |
-| `tabs_create_mcp` | Create new tab |
+| `tabs_context_mcp` | Get MCP window tab context |
+| `tabs_create_mcp` | Create new tab in MCP window |
 | `navigate` | Navigate to URL, back, forward |
 | `computer` | Mouse, keyboard, screenshots (13 actions) |
 | `read_page` | Accessibility tree with element refs |
 | `get_page_text` | Extract article/main text |
-| `find` | Find elements by text/attributes |
+| `find` | Find elements by text/purpose |
 | `form_input` | Set form values by ref |
 | `javascript_tool` | Execute JS in page context |
 | `read_console_messages` | Console output (filtered) |
 | `read_network_requests` | Network activity |
 | `resize_window` | Resize browser window |
-| `upload_image` | Upload screenshot to file input |
+| `upload_image` | Not supported in Firefox WebExtensions |
 | `gif_creator` | GIF recording (stub) |
 | `shortcuts_list` | List shortcuts (stub) |
 | `shortcuts_execute` | Run shortcut (stub) |
 | `switch_browser` | Switch browser (stub) |
 | `update_plan` | Present plan (auto-approved) |
 
+## Firefox Notes
+
+### Tab groups → MCP window
+
+The Chrome version uses tab groups to track Claude's tabs. Firefox has no tab groups API, so this extension instead opens a dedicated **MCP window**. All tabs Claude creates live in that window. The window ID is saved to extension storage and recovered automatically after Firefox restarts or the service worker is reloaded.
+
+### Synthetic events
+
+Firefox WebExtensions cannot use the Chrome DevTools Protocol. Mouse clicks, keyboard input, and scrolling are dispatched as synthetic DOM events from a content script. These events have `isTrusted: false`, which means:
+
+- Most web apps work fine — synthetic events are standard practice for testing frameworks
+- A small number of hardened apps check `event.isTrusted` and ignore synthetic events; those interactions will fail silently
+
+### Screenshots
+
+`tabs.captureVisibleTab()` can only capture the active tab in a window. The extension automatically activates the target tab before each screenshot. If the MCP window is in the background, the tab switch is invisible since Firefox doesn't require the window to be focused.
+
+### Console monitoring
+
+Console messages are captured via a MAIN-world interceptor injected into the page. Messages logged **before** `read_console_messages` is first called on a tab are not captured. Call `read_console_messages` early in a session to start capturing.
+
 ## Updating After Code Changes
 
-No build step. All files are plain JavaScript. After pulling or editing code:
+No build step. All files are plain JavaScript. After pulling or editing:
 
 | What changed | What to do |
 |---|---|
-| `extension/background.js` or `extension/content.js` or `extension/manifest.json` | Reload the extension: `brave://extensions` > click the reload icon |
+| `extension/background.js`, `content.js`, or `manifest.json` | Reload: `about:debugging` → click the reload icon next to the extension |
 | `host/mcp-server.js` | Kill stale servers and reconnect: `pkill -f "node.*mcp-server"` then `/mcp` in Claude Code |
-| `host/native-host.js` | Restart the browser (close all windows, reopen) |
-| `install.sh` or native host name changed | Re-run `./install.sh <extension-id>`, restart browser, re-add MCP |
+| `host/native-host.js` | Restart Firefox (close all windows, reopen) |
+| `install.sh` or native host name changed | Re-run `./install.sh`, restart Firefox, re-add MCP |
 
-### Quick reset (nuclear option)
+### Quick reset
 
 If things are broken and you're not sure why:
 
@@ -180,11 +244,11 @@ If things are broken and you're not sure why:
 pkill -f "node.*mcp-server"
 
 # 2. Re-run install
-./install.sh <your-extension-id>
+./install.sh
 
-# 3. Restart browser (close all windows, reopen)
+# 3. Restart Firefox (close all windows, reopen)
 
-# 4. Reload extension in brave://extensions
+# 4. Reload extension in about:debugging
 
 # 5. Reconnect in Claude Code
 # /mcp
@@ -192,7 +256,7 @@ pkill -f "node.*mcp-server"
 
 ## Multiple Sessions
 
-Multiple Claude Code sessions can share the same browser extension. The first session becomes the "primary" (owns the TCP port), and subsequent sessions connect as clients through the primary. All sessions can use the browser simultaneously.
+Multiple Claude Code sessions can share the same browser extension. The first session becomes the "primary" (owns the TCP port), and subsequent sessions connect as clients through the primary.
 
 If a session disconnects, kill stale servers and reconnect:
 
@@ -205,49 +269,47 @@ pkill -f "node.*mcp-server"
 
 ### Extension not connecting
 
-1. Verify the extension is loaded and enabled
-2. Check that `./install.sh` was run with the correct extension ID
-3. Restart the browser completely (all windows)
-4. Verify the native messaging host manifest exists:
-   - **Chrome (macOS)**: `~/Library/Application Support/Google/Chrome/NativeMessagingHosts/com.anthropic.open_claude_in_chrome.json`
-   - **Brave (macOS)**: `~/Library/Application Support/BraveSoftware/Brave-Browser/NativeMessagingHosts/com.anthropic.open_claude_in_chrome.json`
-   - **Edge (macOS)**: `~/Library/Application Support/Microsoft Edge/NativeMessagingHosts/com.anthropic.open_claude_in_chrome.json`
+1. Verify the extension is loaded and enabled in `about:debugging`
+2. Make sure `./install.sh` completed without errors (macOS/Linux) or the registry key is set (Windows)
+3. Restart Firefox completely (all windows closed)
+4. Verify the native messaging manifest exists:
+   - **macOS**: `~/Library/Application Support/Mozilla/NativeMessagingHosts/com.anthropic.open_claude_in_firefox.json`
+   - **Linux**: `~/.mozilla/native-messaging-hosts/com.anthropic.open_claude_in_firefox.json`
+   - **Windows**: check `HKCU\SOFTWARE\Mozilla\NativeMessagingHosts\com.anthropic.open_claude_in_firefox` in the registry
 
 ### MCP server not found
 
 Use an absolute path:
 ```bash
-claude mcp add open-claude-in-chrome -- node /absolute/path/to/host/mcp-server.js
+claude mcp add open-claude-in-firefox -- node /absolute/path/to/host/mcp-server.js
 ```
 
 ### "Browser extension is not connected"
 
 The MCP server started but the native host hasn't connected. Try:
-1. Open any webpage (wakes the service worker)
-2. Check service worker logs: `chrome://extensions` > "Inspect views: service worker"
-3. Verify `host/native-host-wrapper.sh` exists
+1. Open any webpage in the MCP window (wakes the service worker)
+2. Check service worker logs: `about:debugging` → Inspect the extension's service worker
+3. Verify `host/native-host-wrapper.sh` (macOS/Linux) or `host/native-host-wrapper.bat` (Windows) exists and is executable
 
 ### Tools fail immediately after reconnect
 
-Stale MCP server processes from previous sessions may be holding the port. Fix:
+Stale MCP server processes from previous sessions may be holding the port:
 
 ```bash
 pkill -f "node.*mcp-server"
 ```
 
-Then `/mcp` in Claude Code to reconnect. The fresh server will bind the port and accept the native host connection.
+Then `/mcp` in Claude Code to reconnect.
 
 ### Port conflict
 
 Default port is 18765. To change:
-1. Create `~/.config/open-claude-in-chrome/config.json`:
+1. Create `~/.config/open-claude-in-firefox/config.json`:
    ```json
    { "port": 19000 }
    ```
-2. Restart browser and Claude Code
+2. Restart Firefox and Claude Code
 
 ## License
 
 MIT
-
-Built by [Sebastian Sosa](https://github.com/CakeCrusher) ([Noemica](https://noemica.io))

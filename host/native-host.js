@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
-// Native Messaging Host for Open Claude in Chrome extension.
-// Launched by Chrome when the extension calls connectNative().
-// Bridges between Chrome native messaging (stdin/stdout, 4-byte LE length prefix + JSON)
+// Native Messaging Host for Open Claude in Firefox extension.
+// Launched by Firefox when the extension calls connectNative().
+// Bridges between Firefox native messaging (stdin/stdout, 4-byte LE length prefix + JSON)
 // and the MCP server (TCP on localhost).
 
 import net from "node:net";
@@ -16,7 +16,7 @@ function getPort() {
   const configPath = path.join(
     os.homedir(),
     ".config",
-    "open-claude-in-chrome",
+    "open-claude-in-firefox",
     "config.json"
   );
   try {
@@ -27,7 +27,7 @@ function getPort() {
   }
 }
 
-// --- Native messaging protocol (Chrome <-> this process) ---
+// --- Native messaging protocol (Firefox <-> this process) ---
 
 function readNativeMessage(buffer) {
   const messages = [];

@@ -1,4 +1,4 @@
-// Content script for Open Claude in Chrome extension.
+// Content script for Open Claude in Firefox extension.
 // Injected into every page. Provides:
 // - Accessibility tree generation (read_page)
 // - Element ref mapping with WeakRef (persistent across calls)
@@ -7,8 +7,8 @@
 // - Element finding by text/attributes
 
 (function () {
-  if (window.__unblockedChromeLoaded) return;
-  window.__unblockedChromeLoaded = true;
+  if (window.__openClaudeInFirefoxLoaded) return;
+  window.__openClaudeInFirefoxLoaded = true;
 
   // --- Element reference map ---
   // Persistent ref IDs stored as WeakRefs so GC still works
@@ -415,6 +415,11 @@
     };
   }
 
+  // --- Helper for synthetic events ---
+  function sleep(ms) {
+    return new Promise((r) => setTimeout(r, ms));
+  }
+
   // --- Message handler ---
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg.type === "generateAccessibilityTree") {
@@ -447,11 +452,152 @@
       return true;
     }
 
+    // --- Input event dispatchers (Firefox replacement for CDP Input.*) ---
+
+    if (msg.type === "dispatchMouseClick") {
+      const { x, y, button, clickCount, modifiers } = msg;
+      const el = document.elementFromPoint(x, y) || document.body;
+      const buttonMap = { left: 0, middle: 1, right: 2 };
+      const btn = buttonMap[button ?? "left"] ?? 0;
+      const btns = btn === 0 ? 1 : btn === 1 ? 4 : 2;
+      const shared = {
+        bubbles: true, cancelable: true, view: window,
+        clientX: x, clientY: y, button: btn,
+        ctrlKey: !!(modifiers & 2), altKey: !!(modifiers & 1),
+        shiftKey: !!(modifiers & 8), metaKey: !!(modifiers & 4),
+      };
+      el.dispatchEvent(new MouseEvent("mousemove", { ...shared, buttons: 0, detail: 0 }));
+      el.dispatchEvent(new MouseEvent("mousedown", { ...shared, buttons: btns, detail: 1 }));
+      if (typeof el.focus === "function") el.focus({ preventScroll: true });
+      el.dispatchEvent(new MouseEvent("mouseup", { ...shared, buttons: 0, detail: 1 }));
+      if (button === "right") {
+        el.dispatchEvent(new MouseEvent("contextmenu", { ...shared, buttons: 0, detail: 0 }));
+      } else if (button !== "middle") {
+        for (let i = 0; i < (clickCount || 1); i++) {
+          el.dispatchEvent(new MouseEvent("click", { ...shared, buttons: 0, detail: i + 1 }));
+        }
+        if ((clickCount || 1) >= 2) {
+          el.dispatchEvent(new MouseEvent("dblclick", { ...shared, buttons: 0, detail: 2 }));
+        }
+      }
+      sendResponse({});
+      return true;
+    }
+
+    if (msg.type === "dispatchMouseMove") {
+      const el = document.elementFromPoint(msg.x, msg.y) || document.body;
+      el.dispatchEvent(new MouseEvent("mousemove", {
+        bubbles: true, cancelable: true, view: window,
+        clientX: msg.x, clientY: msg.y, buttons: 0,
+        ctrlKey: !!(msg.modifiers & 2), altKey: !!(msg.modifiers & 1),
+        shiftKey: !!(msg.modifiers & 8), metaKey: !!(msg.modifiers & 4),
+      }));
+      sendResponse({});
+      return true;
+    }
+
+    if (msg.type === "dispatchKeyEvent") {
+      const keyType = msg.eventType === "keyDown" ? "keydown" : "keyup";
+      const el = document.activeElement || document.body;
+      el.dispatchEvent(new KeyboardEvent(keyType, {
+        bubbles: true, cancelable: true, view: window,
+        key: msg.key, code: msg.code, repeat: false,
+        ctrlKey: !!(msg.modifiers & 2), altKey: !!(msg.modifiers & 1),
+        shiftKey: !!(msg.modifiers & 8), metaKey: !!(msg.modifiers & 4),
+      }));
+      sendResponse({});
+      return true;
+    }
+
+    if (msg.type === "insertText") {
+      const el = document.activeElement;
+      if (el) {
+        const tag = el.tagName.toLowerCase();
+        if (tag === "input" || tag === "textarea") {
+          const start = el.selectionStart ?? el.value.length;
+          const end = el.selectionEnd ?? el.value.length;
+          const proto = tag === "textarea" ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+          const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
+          const newVal = el.value.slice(0, start) + msg.text + el.value.slice(end);
+          if (setter) setter.call(el, newVal); else el.value = newVal;
+          el.selectionStart = el.selectionEnd = start + msg.text.length;
+          el.dispatchEvent(new Event("input", { bubbles: true }));
+          el.dispatchEvent(new Event("change", { bubbles: true }));
+        } else if (el.isContentEditable) {
+          document.execCommand("insertText", false, msg.text);
+        }
+      }
+      sendResponse({});
+      return true;
+    }
+
+    if (msg.type === "dispatchScroll") {
+      const el = document.elementFromPoint(msg.x, msg.y) || document.documentElement;
+      el.dispatchEvent(new WheelEvent("wheel", {
+        bubbles: true, cancelable: true, view: window,
+        clientX: msg.x, clientY: msg.y,
+        deltaX: msg.deltaX || 0, deltaY: msg.deltaY || 0,
+        deltaMode: WheelEvent.DOM_DELTA_PIXEL,
+        ctrlKey: !!(msg.modifiers & 2), altKey: !!(msg.modifiers & 1),
+        shiftKey: !!(msg.modifiers & 8), metaKey: !!(msg.modifiers & 4),
+      }));
+      // Also scroll the container for compatibility
+      if (el !== document.documentElement && el !== document.body) {
+        el.scrollBy({ left: msg.deltaX || 0, top: msg.deltaY || 0, behavior: "auto" });
+      } else {
+        window.scrollBy({ left: msg.deltaX || 0, top: msg.deltaY || 0, behavior: "auto" });
+      }
+      sendResponse({});
+      return true;
+    }
+
+    if (msg.type === "scrollToRef") {
+      const el = resolveRef(msg.ref);
+      if (el) el.scrollIntoView({ block: "center", behavior: "smooth" });
+      sendResponse({});
+      return true;
+    }
+
+    if (msg.type === "scrollToPosition") {
+      window.scrollTo(msg.x, msg.y);
+      sendResponse({});
+      return true;
+    }
+
+    if (msg.type === "dispatchDrag") {
+      (async () => {
+        const { startX, startY, endX, endY, modifiers } = msg;
+        const getEl = (x, y) => document.elementFromPoint(x, y) || document.body;
+        const dispatch = (el, type, x, y, buttons) => {
+          el.dispatchEvent(new MouseEvent(type, {
+            bubbles: true, cancelable: true, view: window,
+            clientX: x, clientY: y, button: 0, buttons,
+            ctrlKey: !!(modifiers & 2), altKey: !!(modifiers & 1),
+            shiftKey: !!(modifiers & 8), metaKey: !!(modifiers & 4),
+          }));
+        };
+        dispatch(getEl(startX, startY), "mousemove", startX, startY, 0);
+        await sleep(50);
+        dispatch(getEl(startX, startY), "mousedown", startX, startY, 1);
+        await sleep(50);
+        const steps = 10;
+        for (let i = 1; i <= steps; i++) {
+          const mx = startX + ((endX - startX) * i) / steps;
+          const my = startY + ((endY - startY) * i) / steps;
+          dispatch(getEl(mx, my), "mousemove", mx, my, 1);
+          await sleep(20);
+        }
+        dispatch(getEl(endX, endY), "mouseup", endX, endY, 0);
+        sendResponse({});
+      })();
+      return true;
+    }
+
     return false;
   });
 
-  // Expose globally for executeScript fallback
-  window.__unblockedChrome = {
+  // Expose globally for executeScript (scripting.executeScript MAIN world access)
+  window.__openClaudeInFirefox = {
     generateAccessibilityTree,
     getPageText,
     findElements,

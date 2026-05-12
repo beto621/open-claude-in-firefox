@@ -1,25 +1,28 @@
 {
   "manifest_version": 3,
-  "name": "Open Claude in Chrome",
+  "name": "Open Claude in Firefox",
   "version": "1.0.0",
-  "description": "Claude in Chrome, open source. No domain blocklist. Any Chromium browser.",
-  "minimum_chrome_version": "116",
+  "description": "Claude in Firefox, open source. No domain blocklist.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "open-claude-in-firefox@anthropic",
+      "strict_min_version": "109.0"
+    }
+  },
   "permissions": [
     "tabs",
-    "debugger",
     "activeTab",
     "scripting",
     "nativeMessaging",
-    "tabGroups",
-    "windows",
     "storage",
-    "alarms"
+    "alarms",
+    "webRequest"
   ],
   "host_permissions": [
     "<all_urls>"
   ],
   "background": {
-    "service_worker": "background.js"
+    "scripts": ["background.js"]
   },
   "content_scripts": [
     {

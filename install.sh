@@ -1,36 +1,14 @@
 #!/bin/bash
 set -e
 
-# Install script for Open Claude in Chrome extension.
-# Registers the native messaging host for Chrome, Edge, and Brave.
-#
-# Usage: ./install.sh <extension-id> [extension-id-2] [extension-id-3] ...
-#
-# Pass one extension ID per browser. Each Chromium browser assigns a different
-# ID when loading unpacked extensions, so if you use both Chrome and Brave,
-# pass both IDs.
+# Install script for Open Claude in Firefox extension.
+# Registers the native messaging host for Firefox.
 
-if [ -z "$1" ]; then
-  echo "Usage: ./install.sh <extension-id> [extension-id-2] ..."
-  echo ""
-  echo "Pass one extension ID per browser you want to use."
-  echo "Each browser assigns a different ID to the same unpacked extension."
-  echo ""
-  echo "Steps:"
-  echo "  1. Open chrome://extensions (and/or brave://extensions)"
-  echo "  2. Enable Developer Mode"
-  echo "  3. Click 'Load unpacked' and select the extension/ directory"
-  echo "  4. Copy the extension ID shown under the extension name"
-  echo "  5. Repeat for each browser"
-  echo "  6. Run: ./install.sh <chrome-id> <brave-id>"
-  exit 1
-fi
-
-EXTENSION_IDS=("$@")
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 HOST_DIR="$SCRIPT_DIR/host"
 NATIVE_HOST_PATH="$HOST_DIR/native-host-wrapper.sh"
-HOST_NAME="com.anthropic.open_claude_in_chrome"
+HOST_NAME="com.anthropic.open_claude_in_firefox"
+EXTENSION_ID="open-claude-in-firefox@anthropic"
 
 # Verify node is available
 if ! command -v node &> /dev/null; then
@@ -38,7 +16,7 @@ if ! command -v node &> /dev/null; then
   exit 1
 fi
 
-# Verify npm dependencies are installed
+# Install npm dependencies
 if [ ! -d "$HOST_DIR/node_modules" ]; then
   echo "Installing npm dependencies..."
   cd "$HOST_DIR" && npm install
@@ -46,7 +24,6 @@ if [ ! -d "$HOST_DIR/node_modules" ]; then
 fi
 
 # Create the native host wrapper script
-# Chrome launches this via native messaging — it needs to find node and the script.
 cat > "$NATIVE_HOST_PATH" << WRAPPER
 #!/bin/sh
 exec "$(which node)" "$HOST_DIR/native-host.js"
@@ -55,29 +32,19 @@ chmod +x "$NATIVE_HOST_PATH"
 
 echo "Created native host wrapper: $NATIVE_HOST_PATH"
 
-# Build allowed_origins array from all extension IDs
-ORIGINS=""
-for i in "${!EXTENSION_IDS[@]}"; do
-  if [ $i -gt 0 ]; then ORIGINS="$ORIGINS,"; fi
-  ORIGINS="$ORIGINS
-    \"chrome-extension://${EXTENSION_IDS[$i]}/\""
-done
-
-# Native messaging host manifest
+# Firefox native messaging manifest uses allowed_extensions (not allowed_origins)
 generate_manifest() {
   cat << EOF
 {
   "name": "$HOST_NAME",
-  "description": "Open Claude in Chrome Native Messaging Host",
+  "description": "Open Claude in Firefox Native Messaging Host",
   "path": "$NATIVE_HOST_PATH",
   "type": "stdio",
-  "allowed_origins": [$ORIGINS
-  ]
+  "allowed_extensions": ["$EXTENSION_ID"]
 }
 EOF
 }
 
-# Platform-specific installation
 install_host() {
   local browser_name="$1"
   local host_dir="$2"
@@ -93,29 +60,27 @@ install_host() {
 }
 
 echo ""
-echo "Installing native messaging host for extension(s): ${EXTENSION_IDS[*]}"
+echo "Installing native messaging host..."
 echo ""
 
 case "$(uname)" in
   Darwin)
-    install_host "Google Chrome" \
-      "$HOME/Library/Application Support/Google/Chrome/NativeMessagingHosts"
-    install_host "Microsoft Edge" \
-      "$HOME/Library/Application Support/Microsoft Edge/NativeMessagingHosts"
-    install_host "Brave Browser" \
-      "$HOME/Library/Application Support/BraveSoftware/Brave-Browser/NativeMessagingHosts"
+    install_host "Firefox" \
+      "$HOME/Library/Application Support/Mozilla/NativeMessagingHosts"
     ;;
   Linux)
-    install_host "Google Chrome" \
-      "$HOME/.config/google-chrome/NativeMessagingHosts"
-    install_host "Microsoft Edge" \
-      "$HOME/.config/microsoft-edge/NativeMessagingHosts"
-    install_host "Brave Browser" \
-      "$HOME/.config/BraveSoftware/Brave-Browser/NativeMessagingHosts"
+    install_host "Firefox" \
+      "$HOME/.mozilla/native-messaging-hosts"
     ;;
   *)
     echo "Error: Unsupported platform $(uname). This script supports macOS and Linux."
-    echo "For Windows, manually create the registry entries and host manifest."
+    echo ""
+    echo "For Windows, manually create a registry key:"
+    echo "  Key:   HKEY_CURRENT_USER\\SOFTWARE\\Mozilla\\NativeMessagingHosts\\$HOST_NAME"
+    echo "  Value: (Default) = path to the manifest JSON file"
+    echo ""
+    echo "Manifest contents (save as $HOST_NAME.json):"
+    generate_manifest
     exit 1
     ;;
 esac
@@ -123,12 +88,20 @@ esac
 echo ""
 echo "Done! Next steps:"
 echo ""
-echo "  1. Restart your browser (close all windows and reopen)"
-echo "  2. Add the MCP server to Claude Code:"
+echo "  1. Load the extension in Firefox:"
+echo "     a. Open about:debugging"
+echo "     b. Click 'This Firefox'"
+echo "     c. Click 'Load Temporary Add-on...'"
+echo "     d. Select the extension/manifest.json file"
+echo "     (For a permanent install, use about:addons > Install Add-on From File)"
 echo ""
-echo "     claude mcp add open-claude-in-chrome -- node $HOST_DIR/mcp-server.js"
+echo "  2. Restart Firefox (required for native messaging to take effect)"
 echo ""
-echo "  3. Start a new Claude Code session and test:"
+echo "  3. Add the MCP server to Claude Code:"
 echo ""
-echo '     Ask Claude: "Navigate to reddit.com and take a screenshot"'
+echo "     claude mcp add open-claude-in-firefox -- node $HOST_DIR/mcp-server.js"
+echo ""
+echo "  4. Start a new Claude Code session and test:"
+echo ""
+echo '     Ask Claude: "Navigate to example.com and take a screenshot"'
 echo ""

@@ -1,10 +1,10 @@
-# Open Claude in Chrome — Integration Test Prompt
+# Open Claude in Firefox — Integration Test Prompt
 
-Copy and paste everything below the line into a new Claude Code session that has the `open-claude-in-chrome` MCP configured.
+Copy and paste everything below the line into a new Claude Code session that has the `open-claude-in-firefox` MCP configured.
 
 ---
 
-You are running an integration test for a Chrome browser automation extension. Your job is to execute every step below and use the specific MCP tool listed for each step. Do NOT skip any tool — every single one must be called at least once.
+You are running an integration test for a Firefox browser automation extension. Your job is to execute every step below and use the specific MCP tool listed for each step. Do NOT skip any tool — every single one must be called at least once.
 
 Execute these steps in order:
 
@@ -14,7 +14,7 @@ Execute these steps in order:
 3. Call `tabs_create_mcp` again to create a second tab. Record its tab ID as TAB_2.
 
 ## Navigation + Window
-4. Call `navigate` to go to `https://www.reddit.com` in TAB_1. (This domain is blocked in the official Claude in Chrome extension — if this works, the unblocked extension is functioning.)
+4. Call `navigate` to go to `https://www.reddit.com` in TAB_1. (This domain is blocked in Anthropic's official Chrome extension — if this works, the unrestricted Firefox extension is functioning.)
 5. Call `resize_window` to set the window to 1280x800 using TAB_1.
 
 ## Screenshots + Reading
@@ -61,7 +61,7 @@ Execute these steps in order:
 
 ## Plan + Upload
 32. Call `update_plan` with domains `["reddit.com", "news.ycombinator.com"]` and approach `["Testing browser automation", "Validating all tools", "Checking parity with Claude in Chrome"]`.
-33. Call `upload_image` on TAB_1 with the imageId from your first screenshot (step 6), using ref from step 9.
+33. Call `upload_image` on TAB_1 with the imageId from your first screenshot (step 6), using ref from step 9. (Expected: "not supported" response — this is correct behaviour on Firefox.)
 
 ## Validation
 
