@@ -3,6 +3,7 @@ host/native-host-wrapper.sh
 host/native-host-wrapper.bat
 host/com.anthropic.open_claude_in_firefox.json
 *.xpi
+*.zip
 .env
 *.log
 .DS_Store
