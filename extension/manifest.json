@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Open Claude in Firefox",
+  "name": "Claude MCP",
   "version": "1.0.0",
   "description": "Claude in Firefox, open source. No domain blocklist.",
   "browser_specific_settings": {
